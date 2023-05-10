@@ -1,0 +1,83 @@
+########################
+# Tiny Tiny RSS
+# https://tt-rss.org/
+# https://git.tt-rss.org/fox/tt-rss
+########################
+FROM alpine:3.12
+
+MAINTAINER DevDotNet.Org <anton@devdotnet.org>
+LABEL maintainer="DevDotNet.Org <anton@devdotnet.org>"
+
+ENV LANG=en_US.UTF-8
+
+#Copy to image
+COPY copyables /
+
+#Install
+RUN apk add -U --no-cache bash sudo wget git \
+	nginx postgresql-dev \
+#Php7
+	php7 php7-apcu php7-curl php7-dom php7-fileinfo php7-fpm php7-gd php7-iconv \
+	php7-intl php7-json php7-mbstring php7-mysqli php7-mysqlnd php7-opcache \
+	php7-pcntl php7-pdo php7-pdo_mysql php7-pdo_pgsql php7-pgsql php7-posix \
+	php7-session php7-zlib \
+#Delete logs
+	&& rm -rf /var/log/* \
+#Mkdir
+    && mkdir -p /run/nginx/ \
+    && mkdir -p /usr/html/ \	
+	&& mkdir -p /usr/logs/nginx \
+	&& mkdir -p /var/run/ \
+	&& mkdir -p /var/tmp/nginx/proxy \	
+	&& mkdir -p /var/log/nginx \
+#Move files
+	&& mv /nginx.conf /etc/nginx/ \
+	&& mv /php-fpm.conf /etc/php7/ \
+	&& mv /feedupdate.sh /etc/periodic/15min/feedupdate.sh \
+	&& mv /robots.txt /usr/html/ \
+#Prepair
+	&& apk add --no-cache --virtual=build-dependencies curl tar \
+	&& ln -s /sbin/php-fpm7 /sbin/php-fpm \
+	&& ln -sf /dev/null /var/log/nginx/access.log \
+	&& ln -sf /dev/null /var/log/nginx/error.log \
+	&& chmod +x /etc/periodic/15min/feedupdate.sh && chmod +x /entrypoint.sh \	
+#Get ttrss
+	&& curl -o /tmp/ttrss.tar.gz -L "https://git.tt-rss.org/git/tt-rss/archive/master.tar.gz" \
+    && tar xf /tmp/ttrss.tar.gz -C /usr/html/ --strip-components=1 \
+#Configuration ttrss
+	&& mkdir -p /ttrss \
+	&& cp /usr/html/config.php-dist /ttrss/config.php \    
+    && ln -s /ttrss/config.php /usr/html/config.php \	
+#Cleaning
+	&& rm -rf /tmp/ttrss.tar.gz \
+    && apk del build-dependencies \
+    && rm -rf /var/lib/{cache,log}/ \
+    && rm -rf /var/lib/apt/lists/*.lz4 \
+    && rm -rf /tmp/* /var/tmp/* \
+    && rm -rf /usr/share/doc/ \
+    && rm -rf /usr/share/man/ \
+	&& rm -rf /var/cache/apk/*
+
+#Configuration layer
+	
+RUN sed -i 's/;cgi.fix_pathinfo=1/cgi.fix_pathinfo=0/g' /etc/php7/php.ini && \
+    sed -i 's/expose_php = On/expose_php = Off/g' /etc/php7/php.ini && \
+    sed -i "s/nginx:x:100:101:nginx:\/var\/lib\/nginx:\/sbin\/nologin/nginx:x:100:101:nginx:\/usr:\/bin\/bash/g" /etc/passwd && \
+    sed -i "s/nginx:x:100:101:nginx:\/var\/lib\/nginx:\/sbin\/nologin/nginx:x:100:101:nginx:\/usr:\/bin\/bash/g" /etc/passwd-
+    
+#Plugins layer
+#ToDo
+
+
+#End Plugins layer
+
+#Main
+#Folder Ttrss config
+VOLUME ["/ttrss"]
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+#port http
+EXPOSE 80/tcp 
+
+CMD ["/usr/sbin/nginx"]

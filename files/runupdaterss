@@ -1,2 +1,0 @@
-#!/bin/bash
-sudo -u nginx php /usr/html/update.php --feeds --quiet
